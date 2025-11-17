@@ -1,0 +1,503 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NHL Minimum Total System - Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 40px;
+        }
+        
+        .header h1 {
+            font-size: 48px;
+            font-weight: 700;
+            margin-bottom: 10px;
+        }
+        
+        .header .subtitle {
+            font-size: 18px;
+            opacity: 0.9;
+        }
+        
+        .header .updated {
+            font-size: 14px;
+            opacity: 0.7;
+            margin-top: 5px;
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .stat-card {
+            background: white;
+            border-radius: 16px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+        }
+        
+        .stat-label {
+            font-size: 14px;
+            color: #666;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 10px;
+        }
+        
+        .stat-value {
+            font-size: 48px;
+            font-weight: 700;
+            color: #2d3748;
+        }
+        
+        .stat-value.green {
+            color: #48bb78;
+        }
+        
+        .stat-value.orange {
+            color: #ed8936;
+        }
+        
+        .stat-subtext {
+            font-size: 14px;
+            color: #718096;
+            margin-top: 8px;
+        }
+        
+        .charts-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .chart-card {
+            background: white;
+            border-radius: 16px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+        }
+        
+        .chart-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: #2d3748;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+        }
+        
+        .chart-title::before {
+            content: '';
+            width: 4px;
+            height: 20px;
+            background: #667eea;
+            margin-right: 10px;
+            border-radius: 2px;
+        }
+        
+        .bar-chart {
+            display: flex;
+            gap: 20px;
+            height: 200px;
+            align-items: flex-end;
+        }
+        
+        .bar {
+            flex: 1;
+            background: linear-gradient(180deg, #667eea 0%, #764ba2 100%);
+            border-radius: 8px 8px 0 0;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-end;
+            align-items: center;
+            color: white;
+            font-weight: 600;
+            padding-bottom: 10px;
+        }
+        
+        .bar.green {
+            background: linear-gradient(180deg, #48bb78 0%, #38a169 100%);
+        }
+        
+        .bar.orange {
+            background: linear-gradient(180deg, #ed8936 0%, #dd6b20 100%);
+        }
+        
+        .bar-label {
+            position: absolute;
+            bottom: -25px;
+            font-size: 12px;
+            color: #666;
+            text-align: center;
+        }
+        
+        .table-card {
+            background: white;
+            border-radius: 16px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            margin-bottom: 30px;
+        }
+        
+        .table-header {
+            font-size: 20px;
+            font-weight: 600;
+            color: #2d3748;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+        }
+        
+        .table-header::before {
+            content: '✅';
+            margin-right: 10px;
+            font-size: 24px;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        th {
+            text-align: left;
+            padding: 12px;
+            background: #f7fafc;
+            color: #2d3748;
+            font-weight: 600;
+            font-size: 14px;
+            border-bottom: 2px solid #e2e8f0;
+        }
+        
+        td {
+            padding: 12px;
+            border-bottom: 1px solid #e2e8f0;
+            font-size: 14px;
+        }
+        
+        tr:hover {
+            background: #f7fafc;
+        }
+        
+        .win {
+            color: #48bb78;
+            font-weight: 600;
+        }
+        
+        .loss {
+            color: #f56565;
+            font-weight: 600;
+        }
+        
+        .pending {
+            color: #ed8936;
+            font-weight: 600;
+        }
+        
+        .missed {
+            color: #ed8936;
+            font-weight: 600;
+        }
+        
+        @media (max-width: 768px) {
+            .charts-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .header h1 {
+                font-size: 32px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🏒 NHL Minimum Total System</h1>
+            <div class="subtitle">Performance Dashboard - 2024-2025 Season</div>
+            <div class="updated">Last updated: November 17, 2025 at 01:51 AM</div>
+        </div>
+        
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-label">RECORD</div>
+                <div class="stat-value green">14-2</div>
+                <div class="stat-subtext">0 pending</div>
+            </div>
+            
+            <div class="stat-card">
+                <div class="stat-label">WIN RATE</div>
+                <div class="stat-value">87.5%</div>
+                <div class="stat-subtext">16 completed</div>
+            </div>
+            
+            <div class="stat-card">
+                <div class="stat-label">ROI</div>
+                <div class="stat-value green">+-1.6%</div>
+                <div class="stat-subtext">At -800 avg odds</div>
+            </div>
+            
+            <div class="stat-card">
+                <div class="stat-label">MISSED OPPORTUNITIES</div>
+                <div class="stat-value orange">0</div>
+                <div class="stat-subtext">0 correct skips</div>
+            </div>
+        </div>
+        
+        <div class="charts-grid">
+            <div class="chart-card">
+                <div class="chart-title">📊 Confidence Distribution</div>
+                <div class="bar-chart">
+
+                    <div class="bar" style="height: 100.0%;">
+                        7
+                        <div class="bar-label">65-69%</div>
+                    </div>
+
+                    <div class="bar" style="height: 100.0%;">
+                        7
+                        <div class="bar-label">70-74%</div>
+                    </div>
+
+                    <div class="bar" style="height: 28.57142857142857%;">
+                        2
+                        <div class="bar-label">75-79%</div>
+                    </div>
+
+                    <div class="bar" style="height: 0.0%;">
+                        0
+                        <div class="bar-label">80%+</div>
+                    </div>
+
+                </div>
+            </div>
+            
+            <div class="chart-card">
+                <div class="chart-title">📈 Results Overview</div>
+                <div class="bar-chart">
+                    <div class="bar green" style="height: 87.5%;">
+                        14
+                        <div class="bar-label">Wins</div>
+                    </div>
+                    <div class="bar loss" style="height: 12.5%; background: linear-gradient(180deg, #f56565 0%, #e53e3e 100%);">
+                        2
+                        <div class="bar-label">Losses</div>
+                    </div>
+                    <div class="bar orange" style="height: 0.0%;">
+                        0
+                        <div class="bar-label">Missed</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="table-card">
+            <div class="table-header">YES BETS - Completed Games</div>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Game</th>
+                        <th>Line</th>
+                        <th>Actual</th>
+                        <th>Buffer</th>
+                        <th>Conf</th>
+                        <th>Result</th>
+                    </tr>
+                </thead>
+                <tbody>
+
+                    <tr>
+                        <td>2025-11-17</td>
+                        <td>New York Islanders @ Colorado Avalanche</td>
+                        <td>3.5</td>
+                        <td>5.0</td>
+                        <td>+1.5</td>
+                        <td>65%</td>
+                        <td class="win">WIN</td>
+                    </tr>
+
+                    <tr>
+                        <td>2025-11-16</td>
+                        <td>Vancouver Canucks @ Tampa Bay Lightning</td>
+                        <td>3.5</td>
+                        <td>8.0</td>
+                        <td>+4.5</td>
+                        <td>71%</td>
+                        <td class="win">WIN</td>
+                    </tr>
+
+                    <tr>
+                        <td>2025-11-16</td>
+                        <td>Philadelphia Flyers @ Dallas Stars</td>
+                        <td>3.5</td>
+                        <td>6.0</td>
+                        <td>+2.5</td>
+                        <td>66%</td>
+                        <td class="win">WIN</td>
+                    </tr>
+
+                    <tr>
+                        <td>2025-11-16</td>
+                        <td>New York Rangers @ Columbus Blue Jackets</td>
+                        <td>3.5</td>
+                        <td>3.0</td>
+                        <td>-0.5</td>
+                        <td>76%</td>
+                        <td class="loss">LOSS</td>
+                    </tr>
+
+                    <tr>
+                        <td>2025-11-16</td>
+                        <td>Edmonton Oilers @ Carolina Hurricanes</td>
+                        <td>3.5</td>
+                        <td>7.0</td>
+                        <td>+3.5</td>
+                        <td>74%</td>
+                        <td class="win">WIN</td>
+                    </tr>
+
+                    <tr>
+                        <td>2025-11-16</td>
+                        <td>New Jersey Devils @ Washington Capitals</td>
+                        <td>3.5</td>
+                        <td>5.0</td>
+                        <td>+1.5</td>
+                        <td>73%</td>
+                        <td class="win">WIN</td>
+                    </tr>
+
+                    <tr>
+                        <td>2025-11-16</td>
+                        <td>Los Angeles Kings @ Ottawa Senators</td>
+                        <td>3.5</td>
+                        <td>1.0</td>
+                        <td>-2.5</td>
+                        <td>65%</td>
+                        <td class="loss">LOSS</td>
+                    </tr>
+
+                    <tr>
+                        <td>2025-11-15</td>
+                        <td>Tampa Bay Lightning @ Florida Panthers</td>
+                        <td>3.5</td>
+                        <td>4.0</td>
+                        <td>+0.5</td>
+                        <td>73%</td>
+                        <td class="win">WIN</td>
+                    </tr>
+
+                    <tr>
+                        <td>2025-11-14</td>
+                        <td>Buffalo Sabres @ Colorado Avalanche</td>
+                        <td>3.5</td>
+                        <td>9.0</td>
+                        <td>+5.5</td>
+                        <td>78%</td>
+                        <td class="win">WIN</td>
+                    </tr>
+
+                    <tr>
+                        <td>2025-11-14</td>
+                        <td>Edmonton Oilers @ Columbus Blue Jackets</td>
+                        <td>3.5</td>
+                        <td>9.0</td>
+                        <td>+5.5</td>
+                        <td>68%</td>
+                        <td class="win">WIN</td>
+                    </tr>
+
+                    <tr>
+                        <td>2025-11-14</td>
+                        <td>Los Angeles Kings @ Toronto Maple Leafs</td>
+                        <td>3.5</td>
+                        <td>7.0</td>
+                        <td>+3.5</td>
+                        <td>71%</td>
+                        <td class="win">WIN</td>
+                    </tr>
+
+                    <tr>
+                        <td>2025-11-14</td>
+                        <td>Washington Capitals @ Florida Panthers</td>
+                        <td>3.5</td>
+                        <td>9.0</td>
+                        <td>+5.5</td>
+                        <td>70%</td>
+                        <td class="win">WIN</td>
+                    </tr>
+
+                    <tr>
+                        <td>2025-11-14</td>
+                        <td>Dallas Stars @ Montréal Canadiens</td>
+                        <td>3.5</td>
+                        <td>7.0</td>
+                        <td>+3.5</td>
+                        <td>68%</td>
+                        <td class="win">WIN</td>
+                    </tr>
+
+                    <tr>
+                        <td>2025-11-13</td>
+                        <td>Buffalo Sabres @ Utah Mammoth</td>
+                        <td>3.5</td>
+                        <td>7.0</td>
+                        <td>+3.5</td>
+                        <td>65%</td>
+                        <td class="win">WIN</td>
+                    </tr>
+
+                    <tr>
+                        <td>2025-11-13</td>
+                        <td>New York Rangers @ Tampa Bay Lightning</td>
+                        <td>3.5</td>
+                        <td>10.0</td>
+                        <td>+6.5</td>
+                        <td>70%</td>
+                        <td class="win">WIN</td>
+                    </tr>
+
+                    <tr>
+                        <td>2025-11-12</td>
+                        <td>Winnipeg Jets @ Vancouver Canucks</td>
+                        <td>3.5</td>
+                        <td>8.0</td>
+                        <td>+4.5</td>
+                        <td>65%</td>
+                        <td class="win">WIN</td>
+                    </tr>
+
+                </tbody>
+            </table>
+        </div>
+
+    </div>
+</body>
+</html>
