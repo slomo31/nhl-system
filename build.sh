@@ -1,4 +1,2 @@
-#!/usr/bin/env bash
-set -e
-pip install --upgrade pip
-pip install -r requirements_web.txt
+#!/bin/bash
+pip install -q -r requirements_web.txt
