@@ -28,6 +28,8 @@ python update_results.py
 git add data/ nhl_system_results.csv
 git commit -m "Weekly data update - Monday"
 git push
+
+git add . && git commit -m "Update" && git push origin main
 ```
 
 **What this does:**

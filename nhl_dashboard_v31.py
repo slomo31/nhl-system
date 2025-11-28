@@ -1,133 +1,100 @@
 """
 NHL Minimum Totals Dashboard Generator - V3.1 Monte Carlo
 ==========================================================
-Generates index.html with Monte Carlo + Legacy tabs
+Generates a web dashboard with Monte Carlo + Legacy tabs
 matching the CBB and NBA dashboard style.
 
-REPLACES: generate_nhl_dashboard.py
-
-Usage:
-    python generate_nhl_dashboard.py
+Features:
+- Monte Carlo tab: V3.1 system with 96%+ threshold
+- Legacy tab: Original scoring system
+- Live picks display
+- Performance tracking
 """
 
 import pandas as pd
+import json
 import os
 from datetime import datetime
 
 
-def load_results():
-    """Load results from the tracker CSV"""
-    # Try multiple possible filenames
-    possible_files = [
-        'nhl_system_results.csv',
-        'min_total_results_tracker.csv', 
-        'nhl_min_total_results_tracker.csv'
-    ]
-    
-    for filename in possible_files:
-        if os.path.exists(filename):
-            df = pd.read_csv(filename)
-            print(f"   ✅ Loaded results from {filename}")
-            return df
-    
-    print("   ⚠️ No results file found - starting fresh")
-    return pd.DataFrame()
+def load_results_data():
+    """Load results from tracker CSV"""
+    try:
+        df = pd.read_csv('nhl_system_results.csv')
+        return df
+    except FileNotFoundError:
+        # Return empty dataframe with expected columns
+        return pd.DataFrame(columns=[
+            'date', 'game', 'minimum_total', 'actual_total', 
+            'decision', 'hit_rate', 'flag_count', 'result', 'system'
+        ])
 
 
 def load_todays_picks():
-    """Load today's V3.1 picks from decisions folder"""
+    """Load today's picks from the decisions file"""
     today = datetime.now().strftime('%Y-%m-%d')
     decisions_dir = 'output_archive/decisions'
     
+    # Find today's file
     if os.path.exists(decisions_dir):
-        files = sorted(os.listdir(decisions_dir), reverse=True)
-        for filename in files:
-            if filename.startswith(today) and filename.endswith('.csv'):
-                filepath = os.path.join(decisions_dir, filename)
-                df = pd.read_csv(filepath)
-                print(f"   ✅ Loaded today's picks from {filename}")
+        for filename in sorted(os.listdir(decisions_dir), reverse=True):
+            if filename.startswith(today):
+                df = pd.read_csv(os.path.join(decisions_dir, filename))
                 return df
     
-    print("   ⚠️ No picks for today found")
+    # Return empty if not found
     return pd.DataFrame()
 
 
 def generate_dashboard():
-    """Generate the complete HTML dashboard with MC + Legacy tabs"""
-    
-    print("\n🏒 Generating NHL V3.1 Dashboard...")
+    """Generate the complete HTML dashboard"""
     
     # Load data
-    results_df = load_results()
+    results_df = load_results_data()
     todays_picks = load_todays_picks()
     
-    # Calculate Legacy stats (your existing 37-7 record)
-    if len(results_df) > 0:
-        # Check for 'result' column
-        if 'result' in results_df.columns:
-            completed = results_df[results_df['result'].isin(['WIN', 'LOSS'])]
-            legacy_wins = len(completed[completed['result'] == 'WIN'])
-            legacy_losses = len(completed[completed['result'] == 'LOSS'])
-            legacy_pending = len(results_df[results_df['result'] == 'PENDING'])
-        else:
-            legacy_wins = 0
-            legacy_losses = 0
-            legacy_pending = 0
-        
-        legacy_total = legacy_wins + legacy_losses
-        legacy_win_rate = (legacy_wins / legacy_total * 100) if legacy_total > 0 else 0
-        
-        # ROI calculation
-        avg_odds = -700  # Typical minimum alternate odds
-        profit_per_win = 100 / abs(avg_odds) * 3  # 3% stake
-        loss_per_loss = 3
-        total_profit = (legacy_wins * profit_per_win) - (legacy_losses * loss_per_loss)
-        total_risked = legacy_total * 3
-        legacy_roi = (total_profit / total_risked * 100) if total_risked > 0 else 0
+    # Separate Monte Carlo vs Legacy results
+    if len(results_df) > 0 and 'system' in results_df.columns:
+        mc_results = results_df[results_df['system'] == 'monte_carlo']
+        legacy_results = results_df[results_df['system'] != 'monte_carlo']
     else:
-        legacy_wins = 0
-        legacy_losses = 0
-        legacy_pending = 0
-        legacy_win_rate = 0
-        legacy_roi = 0
+        mc_results = pd.DataFrame()
+        legacy_results = results_df
     
-    # Monte Carlo stats (new V3.1 system - starts fresh)
-    mc_wins = 0
-    mc_losses = 0
-    mc_pending = 0
-    mc_win_rate = 0
+    # Monte Carlo stats
+    mc_completed = mc_results[mc_results['result'].isin(['WIN', 'LOSS'])] if len(mc_results) > 0 else pd.DataFrame()
+    mc_wins = len(mc_completed[mc_completed['result'] == 'WIN']) if len(mc_completed) > 0 else 0
+    mc_losses = len(mc_completed[mc_completed['result'] == 'LOSS']) if len(mc_completed) > 0 else 0
+    mc_pending = len(mc_results[mc_results['result'] == 'PENDING']) if len(mc_results) > 0 else 0
+    mc_win_rate = (mc_wins / len(mc_completed) * 100) if len(mc_completed) > 0 else 0
+    mc_avg_hit_rate = mc_results['hit_rate'].mean() if len(mc_results) > 0 and 'hit_rate' in mc_results.columns else 0
+    
+    # Legacy stats  
+    legacy_completed = legacy_results[legacy_results['result'].isin(['WIN', 'LOSS'])] if len(legacy_results) > 0 else pd.DataFrame()
+    legacy_wins = len(legacy_completed[legacy_completed['result'] == 'WIN']) if len(legacy_completed) > 0 else 0
+    legacy_losses = len(legacy_completed[legacy_completed['result'] == 'LOSS']) if len(legacy_completed) > 0 else 0
+    legacy_pending = len(legacy_results[legacy_results['result'] == 'PENDING']) if len(legacy_results) > 0 else 0
+    legacy_win_rate = (legacy_wins / len(legacy_completed) * 100) if len(legacy_completed) > 0 else 0
     
     # Today's picks breakdown
-    if len(todays_picks) > 0 and 'decision' in todays_picks.columns:
-        todays_yes = todays_picks[todays_picks['decision'] == 'YES']
-        todays_maybe = todays_picks[todays_picks['decision'] == 'MAYBE']
-        
-        # Get 0-flag picks (cleanest)
-        if 'flag_count' in todays_picks.columns:
-            zero_flag = todays_yes[todays_yes['flag_count'] == 0]
-        else:
-            zero_flag = pd.DataFrame()
-        
-        # Average hit rate
-        if 'hit_rate' in todays_yes.columns and len(todays_yes) > 0:
-            avg_hit_rate = todays_yes['hit_rate'].mean()
-        else:
-            avg_hit_rate = 0
-    else:
-        todays_yes = pd.DataFrame()
-        todays_maybe = pd.DataFrame()
-        zero_flag = pd.DataFrame()
-        avg_hit_rate = 0
+    todays_yes = todays_picks[todays_picks['decision'] == 'YES'] if len(todays_picks) > 0 else pd.DataFrame()
+    todays_maybe = todays_picks[todays_picks['decision'] == 'MAYBE'] if len(todays_picks) > 0 else pd.DataFrame()
     
-    # Build HTML
-    html = f'''<!DOCTYPE html>
+    # Count 0-flag picks (cleanest bets)
+    zero_flag_picks = todays_yes[todays_yes['flag_count'] == 0] if len(todays_yes) > 0 and 'flag_count' in todays_yes.columns else pd.DataFrame()
+    
+    html = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>NHL Minimum Totals V3.1</title>
     <style>
-        * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+        * {{
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }}
         
         body {{
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -136,10 +103,18 @@ def generate_dashboard():
             color: white;
         }}
         
-        .container {{ max-width: 1200px; margin: 0 auto; padding: 20px; }}
+        .container {{
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }}
         
         /* Header */
-        .header {{ text-align: center; padding: 30px 0; }}
+        .header {{
+            text-align: center;
+            padding: 30px 0;
+        }}
+        
         .header h1 {{
             font-size: 2.5rem;
             margin-bottom: 10px;
@@ -148,23 +123,40 @@ def generate_dashboard():
             justify-content: center;
             gap: 15px;
         }}
+        
+        .header .emoji {{
+            font-size: 2.5rem;
+        }}
+        
         .version-badge {{
             background: linear-gradient(135deg, #10b981, #059669);
             padding: 5px 15px;
             border-radius: 20px;
             font-size: 0.9rem;
             font-weight: bold;
+            margin-left: 10px;
         }}
-        .subtitle {{ color: #94a3b8; font-size: 1rem; margin-top: 5px; }}
-        .last-updated {{ color: #64748b; font-size: 0.85rem; margin-top: 10px; }}
         
-        /* Tabs */
+        .subtitle {{
+            color: #94a3b8;
+            font-size: 1rem;
+            margin-top: 5px;
+        }}
+        
+        .last-updated {{
+            color: #64748b;
+            font-size: 0.85rem;
+            margin-top: 10px;
+        }}
+        
+        /* Tab System */
         .tab-container {{
             display: flex;
             justify-content: center;
             gap: 10px;
             margin: 30px 0;
         }}
+        
         .tab-btn {{
             padding: 12px 30px;
             border: none;
@@ -177,23 +169,28 @@ def generate_dashboard():
             align-items: center;
             gap: 8px;
         }}
+        
         .tab-btn.mc {{
             background: linear-gradient(135deg, #10b981, #059669);
             color: white;
         }}
+        
         .tab-btn.legacy {{
             background: rgba(255,255,255,0.1);
             color: #94a3b8;
             border: 2px solid rgba(255,255,255,0.2);
         }}
+        
         .tab-btn.active {{
             transform: scale(1.05);
             box-shadow: 0 5px 20px rgba(16, 185, 129, 0.4);
         }}
+        
         .tab-btn:not(.active):hover {{
             background: rgba(255,255,255,0.15);
             color: white;
         }}
+        
         .tab-count {{
             background: rgba(0,0,0,0.3);
             padding: 2px 10px;
@@ -208,6 +205,7 @@ def generate_dashboard():
             gap: 20px;
             margin-bottom: 30px;
         }}
+        
         .stat-card {{
             background: rgba(255,255,255,0.05);
             backdrop-filter: blur(10px);
@@ -216,6 +214,7 @@ def generate_dashboard():
             text-align: center;
             border: 1px solid rgba(255,255,255,0.1);
         }}
+        
         .stat-label {{
             color: #94a3b8;
             font-size: 0.8rem;
@@ -223,13 +222,18 @@ def generate_dashboard():
             letter-spacing: 1px;
             margin-bottom: 10px;
         }}
-        .stat-value {{ font-size: 2.5rem; font-weight: bold; }}
+        
+        .stat-value {{
+            font-size: 2.5rem;
+            font-weight: bold;
+        }}
+        
         .stat-value.green {{ color: #10b981; }}
         .stat-value.blue {{ color: #3b82f6; }}
         .stat-value.yellow {{ color: #f59e0b; }}
         .stat-value.red {{ color: #ef4444; }}
         
-        /* Banner */
+        /* Strict Mode Banner */
         .strict-banner {{
             background: linear-gradient(135deg, rgba(16, 185, 129, 0.2), rgba(5, 150, 105, 0.2));
             border: 1px solid rgba(16, 185, 129, 0.5);
@@ -240,8 +244,21 @@ def generate_dashboard():
             align-items: center;
             gap: 10px;
         }}
-        .strict-banner .title {{ color: #10b981; font-weight: bold; font-size: 1.1rem; }}
-        .strict-banner .desc {{ color: #94a3b8; font-size: 0.9rem; }}
+        
+        .strict-banner .icon {{
+            font-size: 1.5rem;
+        }}
+        
+        .strict-banner .title {{
+            color: #10b981;
+            font-weight: bold;
+            font-size: 1.1rem;
+        }}
+        
+        .strict-banner .desc {{
+            color: #94a3b8;
+            font-size: 0.9rem;
+        }}
         
         /* Refresh Button */
         .refresh-btn {{
@@ -253,18 +270,22 @@ def generate_dashboard():
             font-size: 1rem;
             font-weight: 600;
             cursor: pointer;
-            display: inline-flex;
+            display: flex;
             align-items: center;
             gap: 8px;
             margin-bottom: 30px;
         }}
+        
         .refresh-btn:hover {{
             transform: translateY(-2px);
             box-shadow: 0 5px 20px rgba(59, 130, 246, 0.4);
         }}
         
         /* Picks Section */
-        .picks-section {{ margin-bottom: 30px; }}
+        .picks-section {{
+            margin-bottom: 30px;
+        }}
+        
         .section-header {{
             display: flex;
             align-items: center;
@@ -273,8 +294,20 @@ def generate_dashboard():
             padding-bottom: 10px;
             border-bottom: 1px solid rgba(255,255,255,0.1);
         }}
-        .section-header h2 {{ font-size: 1.2rem; font-weight: 600; }}
-        .section-header .count {{ color: #94a3b8; font-size: 0.9rem; }}
+        
+        .section-header .icon {{
+            font-size: 1.3rem;
+        }}
+        
+        .section-header h2 {{
+            font-size: 1.2rem;
+            font-weight: 600;
+        }}
+        
+        .section-header .count {{
+            color: #94a3b8;
+            font-size: 0.9rem;
+        }}
         
         /* Game Cards */
         .game-card {{
@@ -287,13 +320,40 @@ def generate_dashboard():
             justify-content: space-between;
             align-items: center;
         }}
-        .game-card.maybe {{ border-left-color: #f59e0b; }}
-        .game-card.skip {{ border-left-color: #ef4444; opacity: 0.7; }}
-        .game-info h3 {{ font-size: 1.1rem; margin-bottom: 5px; }}
-        .game-details {{ color: #94a3b8; font-size: 0.9rem; }}
-        .game-stats {{ text-align: right; }}
-        .hit-rate {{ font-size: 1.5rem; font-weight: bold; color: #10b981; }}
-        .hit-rate.maybe {{ color: #f59e0b; }}
+        
+        .game-card.maybe {{
+            border-left-color: #f59e0b;
+        }}
+        
+        .game-card.skip {{
+            border-left-color: #ef4444;
+            opacity: 0.7;
+        }}
+        
+        .game-info h3 {{
+            font-size: 1.1rem;
+            margin-bottom: 5px;
+        }}
+        
+        .game-details {{
+            color: #94a3b8;
+            font-size: 0.9rem;
+        }}
+        
+        .game-stats {{
+            text-align: right;
+        }}
+        
+        .hit-rate {{
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: #10b981;
+        }}
+        
+        .hit-rate.maybe {{
+            color: #f59e0b;
+        }}
+        
         .flag-badge {{
             background: rgba(16, 185, 129, 0.2);
             color: #10b981;
@@ -304,20 +364,34 @@ def generate_dashboard():
             margin-top: 5px;
             display: inline-block;
         }}
-        .flag-badge.warning {{ background: rgba(245, 158, 11, 0.2); color: #f59e0b; }}
+        
+        .flag-badge.warning {{
+            background: rgba(245, 158, 11, 0.2);
+            color: #f59e0b;
+        }}
         
         /* Tab Content */
-        .tab-content {{ display: none; }}
-        .tab-content.active {{ display: block; }}
+        .tab-content {{
+            display: none;
+        }}
+        
+        .tab-content.active {{
+            display: block;
+        }}
         
         /* Results Table */
         .results-table {{
             background: rgba(255,255,255,0.05);
             border-radius: 12px;
             overflow: hidden;
-            margin-top: 20px;
+            margin-top: 30px;
         }}
-        .results-table table {{ width: 100%; border-collapse: collapse; }}
+        
+        .results-table table {{
+            width: 100%;
+            border-collapse: collapse;
+        }}
+        
         .results-table th {{
             background: rgba(0,0,0,0.3);
             padding: 15px;
@@ -325,21 +399,52 @@ def generate_dashboard():
             font-size: 0.85rem;
             color: #94a3b8;
             text-transform: uppercase;
+            letter-spacing: 1px;
         }}
+        
         .results-table td {{
             padding: 15px;
             border-bottom: 1px solid rgba(255,255,255,0.05);
         }}
-        .results-table tr:hover {{ background: rgba(255,255,255,0.03); }}
-        .result-win {{ color: #10b981; font-weight: bold; }}
-        .result-loss {{ color: #ef4444; font-weight: bold; }}
+        
+        .results-table tr:hover {{
+            background: rgba(255,255,255,0.03);
+        }}
+        
+        .result-win {{
+            color: #10b981;
+            font-weight: bold;
+        }}
+        
+        .result-loss {{
+            color: #ef4444;
+            font-weight: bold;
+        }}
+        
+        .result-pending {{
+            color: #f59e0b;
+            font-weight: bold;
+        }}
         
         /* Responsive */
         @media (max-width: 768px) {{
-            .stats-grid {{ grid-template-columns: repeat(2, 1fr); }}
-            .header h1 {{ font-size: 1.8rem; flex-direction: column; }}
-            .game-card {{ flex-direction: column; text-align: center; }}
-            .game-stats {{ text-align: center; margin-top: 15px; }}
+            .stats-grid {{
+                grid-template-columns: repeat(2, 1fr);
+            }}
+            
+            .header h1 {{
+                font-size: 1.8rem;
+            }}
+            
+            .game-card {{
+                flex-direction: column;
+                text-align: center;
+            }}
+            
+            .game-stats {{
+                text-align: center;
+                margin-top: 15px;
+            }}
         }}
     </style>
 </head>
@@ -348,7 +453,8 @@ def generate_dashboard():
         <!-- Header -->
         <div class="header">
             <h1>
-                🏒 NHL Minimum Totals
+                <span class="emoji">🏒</span>
+                NHL Minimum Totals
                 <span class="version-badge">V3.1 • 100%</span>
             </h1>
             <p class="subtitle">Monte Carlo V3.1 • 7-0 backtest on 0-flag games</p>
@@ -363,12 +469,13 @@ def generate_dashboard():
             </button>
             <button class="tab-btn legacy" onclick="switchTab('legacy')">
                 📊 Legacy
-                <span class="tab-count">{legacy_wins + legacy_losses}</span>
+                <span class="tab-count">{legacy_wins + legacy_losses + legacy_pending}</span>
             </button>
         </div>
         
         <!-- Monte Carlo Tab -->
         <div id="mc-content" class="tab-content active">
+            <!-- Stats Grid -->
             <div class="stats-grid">
                 <div class="stat-card">
                     <div class="stat-label">Record</div>
@@ -379,105 +486,107 @@ def generate_dashboard():
                     <div class="stat-value blue">{mc_win_rate:.1f}%</div>
                 </div>
                 <div class="stat-card">
-                    <div class="stat-label">Pending Picks</div>
-                    <div class="stat-value yellow">{len(todays_yes)}</div>
+                    <div class="stat-label">0-Flag Picks</div>
+                    <div class="stat-value yellow">{len(zero_flag_picks)}</div>
                 </div>
                 <div class="stat-card">
                     <div class="stat-label">Avg MC Prob</div>
-                    <div class="stat-value green">{avg_hit_rate:.1f}%</div>
+                    <div class="stat-value green">{mc_avg_hit_rate:.1f}%</div>
                 </div>
             </div>
             
+            <!-- Strict Mode Banner -->
             <div class="strict-banner">
-                <span style="font-size: 1.5rem;">✅</span>
+                <span class="icon">✅</span>
                 <div>
                     <div class="title">V3.1 STRICT MODE</div>
                     <div class="desc">Backtest: 7-0 (100%) • Only betting 0-flag games at 96%+ hit rate</div>
                 </div>
             </div>
             
-            <button class="refresh-btn" onclick="location.reload()">🔄 Refresh Data</button>
+            <!-- Refresh Button -->
+            <button class="refresh-btn" onclick="location.reload()">
+                🔄 Refresh Data
+            </button>
             
-            <!-- YES Picks (0 flags) -->
+            <!-- YES Picks -->
             <div class="picks-section">
                 <div class="section-header">
-                    <h2>🟢 ✅ BET THESE - Zero Flags ({len(zero_flag)})</h2>
+                    <span class="icon">🟢</span>
+                    <h2>✅ BET THESE - Zero Flags ({len(zero_flag_picks)})</h2>
                     <span class="count">100% backtest win rate</span>
                 </div>
-'''
+"""
     
-    # Add 0-flag YES picks
-    if len(zero_flag) > 0:
-        for _, pick in zero_flag.iterrows():
-            hit_rate = pick.get('hit_rate', 0)
-            if pd.isna(hit_rate):
-                hit_rate = 0
-            html += f'''
+    # Add YES picks (0 flags only)
+    if len(zero_flag_picks) > 0:
+        for _, pick in zero_flag_picks.iterrows():
+            html += f"""
                 <div class="game-card">
                     <div class="game-info">
                         <h3>{pick['game']}</h3>
-                        <div class="game-details">Line: {pick['minimum_total']} • Expected: {pick.get('expected_total', 'N/A')}</div>
+                        <div class="game-details">
+                            Line: {pick['minimum_total']} • Expected: {pick.get('expected_total', 'N/A')} • Range: TBD
+                        </div>
                     </div>
                     <div class="game-stats">
-                        <div class="hit-rate">{hit_rate:.1f}%</div>
+                        <div class="hit-rate">{pick['hit_rate']:.2f}%</div>
                         <div class="flag-badge">0 FLAGS</div>
                     </div>
                 </div>
-'''
+"""
     else:
-        html += '''
+        html += """
                 <div class="game-card">
                     <div class="game-info">
                         <h3>No 0-flag picks today</h3>
                         <div class="game-details">All games have risk factors - check MAYBE section below</div>
                     </div>
                 </div>
-'''
+"""
     
-    html += f'''
+    html += """
             </div>
             
-            <!-- MAYBE Picks -->
+            <!-- MAYBE Picks (Has Flags) -->
             <div class="picks-section">
                 <div class="section-header">
-                    <h2>🟡 ⚠️ SKIP - Has Flags ({len(todays_maybe)})</h2>
+                    <span class="icon">🟡</span>
+                    <h2>⚠️ SKIP - Has Flags ({len_maybe})</h2>
                     <span class="count">Risk factors detected</span>
                 </div>
-'''
+""".replace('{len_maybe}', str(len(todays_maybe)))
     
-    # Add top 5 MAYBE picks
+    # Add MAYBE picks (top 5 by hit rate)
     if len(todays_maybe) > 0:
-        if 'hit_rate' in todays_maybe.columns:
-            top_maybes = todays_maybe.nlargest(5, 'hit_rate')
-        else:
-            top_maybes = todays_maybe.head(5)
-        
+        top_maybes = todays_maybe.nlargest(5, 'hit_rate') if 'hit_rate' in todays_maybe.columns else todays_maybe.head(5)
         for _, pick in top_maybes.iterrows():
-            hit_rate = pick.get('hit_rate', 0)
-            if pd.isna(hit_rate):
-                hit_rate = 0
-            flag_count = pick.get('flag_count', 0)
-            if pd.isna(flag_count):
-                flag_count = 0
-            html += f'''
+            flag_count = pick.get('flag_count', 0) if pd.notna(pick.get('flag_count', 0)) else 0
+            flags_str = str(pick.get('flags', 'N/A')) if pd.notna(pick.get('flags', '')) else 'N/A'
+            flags_display = flags_str[:50] if len(flags_str) > 50 else flags_str
+            hit_rate_val = pick.get('hit_rate', 0) if pd.notna(pick.get('hit_rate', 0)) else 0
+            html += f"""
                 <div class="game-card maybe">
                     <div class="game-info">
                         <h3>{pick['game']}</h3>
-                        <div class="game-details">Line: {pick['minimum_total']}</div>
+                        <div class="game-details">
+                            Line: {pick['minimum_total']} • Flags: {flags_display}...
+                        </div>
                     </div>
                     <div class="game-stats">
-                        <div class="hit-rate maybe">{hit_rate:.1f}%</div>
+                        <div class="hit-rate maybe">{hit_rate_val:.2f}%</div>
                         <div class="flag-badge warning">{int(flag_count)} FLAGS</div>
                     </div>
                 </div>
-'''
+"""
     
-    html += f'''
+    html += """
             </div>
         </div>
         
         <!-- Legacy Tab -->
         <div id="legacy-content" class="tab-content">
+            <!-- Legacy Stats Grid -->
             <div class="stats-grid">
                 <div class="stat-card">
                     <div class="stat-label">Record</div>
@@ -492,89 +601,58 @@ def generate_dashboard():
                     <div class="stat-value yellow">{legacy_pending}</div>
                 </div>
                 <div class="stat-card">
-                    <div class="stat-label">ROI</div>
-                    <div class="stat-value {"green" if legacy_roi >= 0 else "red"}">{legacy_roi:+.1f}%</div>
+                    <div class="stat-label">Total Picks</div>
+                    <div class="stat-value green">{legacy_total}</div>
                 </div>
             </div>
             
-            <div class="results-table">
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Date</th>
-                            <th>Game</th>
-                            <th>Line</th>
-                            <th>Actual</th>
-                            <th>Conf</th>
-                            <th>Result</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-'''
-    
-    # Add legacy results (most recent first)
-    if len(results_df) > 0 and 'result' in results_df.columns:
-        completed = results_df[results_df['result'].isin(['WIN', 'LOSS'])].copy()
-        if 'game_date' in completed.columns:
-            completed = completed.sort_values('game_date', ascending=False)
-        elif 'date' in completed.columns:
-            completed = completed.sort_values('date', ascending=False)
-        
-        for _, row in completed.head(20).iterrows():
-            result_class = 'result-win' if row['result'] == 'WIN' else 'result-loss'
-            date_col = row.get('game_date', row.get('date', 'N/A'))
-            game_col = row.get('game', 'N/A')
-            line_col = row.get('minimum_total', 0)
-            actual_col = row.get('actual_total', 0)
-            conf_col = row.get('confidence', 0)
-            
-            html += f'''
-                        <tr>
-                            <td>{date_col}</td>
-                            <td>{game_col}</td>
-                            <td>{line_col}</td>
-                            <td>{actual_col}</td>
-                            <td>{conf_col}%</td>
-                            <td class="{result_class}">{row['result']}</td>
-                        </tr>
-'''
-    
-    html += '''
-                    </tbody>
-                </table>
-            </div>
+            <p style="color: #94a3b8; text-align: center; padding: 40px;">
+                Legacy system uses the original 100-point scoring methodology.<br>
+                V3.1 Monte Carlo is recommended for higher accuracy.
+            </p>
         </div>
     </div>
     
     <script>
-        function switchTab(tab) {
-            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
-            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+        function switchTab(tab) {{
+            // Update buttons
+            document.querySelectorAll('.tab-btn').forEach(btn => {{
+                btn.classList.remove('active');
+            }});
             
-            if (tab === 'mc') {
+            // Update content
+            document.querySelectorAll('.tab-content').forEach(content => {{
+                content.classList.remove('active');
+            }});
+            
+            if (tab === 'mc') {{
                 document.querySelector('.tab-btn.mc').classList.add('active');
                 document.getElementById('mc-content').classList.add('active');
-            } else {
+            }} else {{
                 document.querySelector('.tab-btn.legacy').classList.add('active');
                 document.getElementById('legacy-content').classList.add('active');
-            }
-        }
+            }}
+        }}
     </script>
 </body>
 </html>
-'''
+""".replace('{legacy_wins}', str(legacy_wins)).replace('{legacy_losses}', str(legacy_losses)).replace('{legacy_win_rate:.1f}', f'{legacy_win_rate:.1f}').replace('{legacy_pending}', str(legacy_pending)).replace('{legacy_total}', str(legacy_wins + legacy_losses + legacy_pending))
     
     return html
 
 
 def main():
+    """Generate and save the dashboard"""
+    print("🏒 Generating NHL V3.1 Dashboard...")
+    
     html = generate_dashboard()
     
+    # Save to index.html for web deployment
     with open('index.html', 'w') as f:
         f.write(html)
     
-    print("\n✅ Dashboard saved to index.html")
-    print("   Run: git add . && git commit -m 'V3.1 dashboard' && git push")
+    print("✅ Dashboard saved to index.html")
+    print("   Push to GitHub to update live site")
 
 
 if __name__ == "__main__":
