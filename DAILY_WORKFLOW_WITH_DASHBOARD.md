@@ -2,6 +2,16 @@
 
 **Your end-to-end guide with data collection, predictions, results tracking, and live dashboard updates**
 
+
+# Morning - Update results
+python nhl_results_tracker_v31.py
+python nhl_dashboard_v31.py
+git add . && git commit -m "Update" && git push
+
+# Evening - Get picks
+python master_workflow_v31.py
+python nhl_dashboard_v31.py
+git add . && git commit -m "Picks" && git push
 ---
 
 ## 📅 **WEEKLY SETUP (Monday Morning - 20 minutes)**
